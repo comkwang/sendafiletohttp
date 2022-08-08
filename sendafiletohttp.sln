@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.2.32616.157
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "sendafiletohttp", "sendafiletohttp.csproj", "{2BF5C008-FCB1-4AEE-A73E-286D3B3EF8F2}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{2BF5C008-FCB1-4AEE-A73E-286D3B3EF8F2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2BF5C008-FCB1-4AEE-A73E-286D3B3EF8F2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2BF5C008-FCB1-4AEE-A73E-286D3B3EF8F2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2BF5C008-FCB1-4AEE-A73E-286D3B3EF8F2}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {06376C78-7DFC-45BA-BBC6-07C5051B4EB1}
+	EndGlobalSection
+EndGlobal
