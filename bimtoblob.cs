@@ -12,6 +12,7 @@ using Microsoft.WindowsAzure.Storage.Blob;
 using System.Net.Http;
 using System.Collections.Generic;
 using System.Text;
+using Newtonsoft.Json.Linq;
 
 namespace sendafiletohttp
 {
@@ -24,74 +25,41 @@ namespace sendafiletohttp
         {
 
             var formdata = await req.ReadFormAsync();
-            string url;
-            string filename;
-            string uploadkey;
-            string bucketkey;
-            string objectkey;
-            string token;
-            string projectid;
-            string upload_file_name = string.Empty;
-            string upload_folder_id = string.Empty;
-            string upload_object_id = string.Empty;
-            int size = 0;
+            string s3url;
+            string bimfilename;
+            string stgconnectionstring;
+            string containername;
+            string callbackurl;
             try
             {
-                url = formdata["url"];
-                filename = formdata["filename"];
-                uploadkey = formdata["uploadkey"];
-                bucketkey = formdata["bucketkey"];
-                objectkey = formdata["objectkey"];
-                token = formdata["token"];
-                projectid = formdata["projectid"];
-                upload_file_name = formdata["upload_file_name"];
-                upload_folder_id = formdata["upload_folder_id"];
-                upload_object_id = formdata["upload_object_id"];
-                size = Int32.Parse(formdata["size"]);
-                log.LogError("url {}\n", url);
-                log.LogError("filename {}\n", filename);
-                log.LogError("uploadkey {}]n", uploadkey);
-                log.LogError("bucketkey {}\n", bucketkey);
-                log.LogError("objectkey {}\n", objectkey);
-                log.LogError("token {}\n", token);
-                log.LogError("projectid {}\n", projectid);
-                log.LogError("upload_file_name {}\n", upload_file_name);
-                log.LogError("upload_folder_id {}\n", upload_folder_id);
-                log.LogError("upload_object_id {}\n", upload_object_id);
-                log.LogError("size {}\n", size);
+                s3url = formdata["s3url"];
+                bimfilename = formdata["bimfilename"];
+                stgconnectionstring = formdata["stgconnectionstring"];
+                containername = formdata["containername"];
+                callbackurl = formdata["callbackurl"];
 
-
+                log.LogInformation("s3url {}\n", s3url);
+                log.LogInformation("blobname {}\n", bimfilename);
+                log.LogInformation("stgconnectionstring {}\n", stgconnectionstring);
+                log.LogInformation("containername {}\n", containername);
 
             }
             catch (Exception ex)
             {
                 log.LogError(ex.Message);
-                return new BadRequestObjectResult("no parameter");
+                return new BadRequestObjectResult("missing parameter");
             }
-            log.LogInformation("downloading from BIM360...\n");
+          
             try
             {
-                //var httpClient = new HttpClient();
-                //httpClient.Timeout = TimeSpan.FromMinutes(60);
-               
-                //string range = string.Format("bytes={0}-{1}", start, end);
-                //httpClient.DefaultRequestHeaders.Add("range", range);
-                //var response = await httpClient.GetAsync(url); 
-                //var contents = await response.Content.ReadAsStreamAsync();
-               
-                 
-                log.LogInformation("uploading to Blob...\n");
-                string storageAccount_connectionString = "DefaultEndpointsProtocol=https;AccountName=storagecde;AccountKey=qk9t+wsINASsXfC+W9+e9crkwhYZ1x+I2PFtawdGMLbw8y32YBRL7Lul4QjolCoANLMEMwJC01rR+AStkrFBQw==;EndpointSuffix=core.windows.net";
-                string azure_ContainerName = "cde";
-                CloudStorageAccount mycloudStorageAccount = CloudStorageAccount.Parse(storageAccount_connectionString);
+                                         
+                CloudStorageAccount mycloudStorageAccount = CloudStorageAccount.Parse(stgconnectionstring);
                 CloudBlobClient blobClient = mycloudStorageAccount.CreateCloudBlobClient();
-                CloudBlobContainer container = blobClient.GetContainerReference(azure_ContainerName);
-                CloudBlockBlob cloudBlockBlob = container.GetBlockBlobReference(filename);
+                CloudBlobContainer container = blobClient.GetContainerReference(containername);
+                CloudBlockBlob cloudBlockBlob = container.GetBlockBlobReference(bimfilename);
 
-
-
-
-                int bytesize = 8000000;
+                
+                int bytesize = 50000000;
                 // local variable to track the current number of bytes read into buffer
                 int bytesRead;
 
@@ -100,42 +68,41 @@ namespace sendafiletohttp
                 int offset= 0;
                 // Create list to track blockIds, it will be needed after the loop
                 List<string> blockList = new List<string>();
-
-              
-
+                byte[] buffer = new byte[bytesize];
+               
+                log.LogInformation("start downloading from M360...\n");
                 do
                 {
 
-                    var httpClient = new HttpClient();
-                    httpClient.Timeout = TimeSpan.FromMinutes(60);
-                    string range = string.Format("bytes={0}-{1}", offset, offset + bytesize);
+                    var httpClient = new HttpClient();                
 
-                    log.LogInformation("range {0}\n", range);
+                    string range = string.Format("bytes={0}-{1}", offset, offset + bytesize-1);
+
                     httpClient.DefaultRequestHeaders.Add("range", range);
-     
-                    var response = httpClient.GetAsync(url).Result;  
-                        
+                  
+                    var response = httpClient.GetAsync(s3url).Result;                          
                     var contents = Task.Run(() => response.Content.ReadAsStreamAsync()).Result;
-                    
-                    log.LogError("content length {}\n", contents.Length);
-
+                   
+                    if (contents.Length != bytesize)
+                    {
+                        log.LogError(response.ToString());
+                        log.LogError(contents.ToString());
+                    }
                     // increment block number by 1 each iteration
-                    blockNumber++;
-                    
+                    blockNumber++;                    
                     // set block ID as a string and convert it to Base64 which is the required format
                     string blockId = $"{blockNumber:0000000}";
                     string base64BlockId = Convert.ToBase64String(Encoding.UTF8.GetBytes(blockId));
-
+                   
                     // create buffer and retrieve chunk
-                    byte[] buffer = new byte[bytesize];
-
+                   //byte[] buffer = new byte[bytesize];
 
                     //MemoryStream mem = new MemoryStream();
-                    bytesRead = await contents.ReadAsync(buffer,0,3333skesk bytesize);
-                    log.LogInformation("offset {0} size {1} byteread {2}\n", offset, offset + bytesize, bytesRead);
-                    offset = bytesize * blockNumber + blockNumber;
+                    bytesRead = await contents.ReadAsync(buffer,0, bytesize);
+                    log.LogInformation("{0,2} blocknumber {1,30} content length {2,12} byteread {3,12}\n", blockNumber, range, contents.Length,bytesRead);
+                    offset = bytesize * blockNumber;
 
-
+                    
                     // Upload buffer chunk to Azure
                     //await cloudBlockBlob.PutBlockAsync(base64BlockId, mem, null);
 
@@ -143,21 +110,27 @@ namespace sendafiletohttp
 
                     // add the current blockId into our list
                     blockList.Add(base64BlockId);
-                   // contents.Dispose();
+                
+                    // contents.Dispose();
                     // While bytesRead == size it means there is more data left to read and process
-                } while (offset < size);
 
+                } while (bytesRead == bytesize);
+           
                 // add the blockList to the Azure which allows the resource to stick together the chunks
-                await cloudBlockBlob.PutBlockListAsync(blockList);
+               await cloudBlockBlob.PutBlockListAsync(blockList);
 
                 // make sure to dispose the stream once your are done
-              
 
 
+                // await cloudBlockBlob.UploadFromStreamAsync(contents);
+                var httpClient2 = new HttpClient();
+               
+                
+                string payload = string.Format(@"{{ ""bimfilename"":""{0}"", ""size"":{1} }}",bimfilename, offset + bytesRead);
+                var httpContent = new StringContent(payload, Encoding.UTF8, "application/json");                
+                var response2 = await httpClient2.PostAsync(callbackurl, httpContent);
+                //var contents = Task.Run(() => response.Content.ReadAsStreamAsync()).Result;
 
-
-
-               // await cloudBlockBlob.UploadFromStreamAsync(contents);
             } catch(Exception e)
             {
                 log.LogError(e.Message);

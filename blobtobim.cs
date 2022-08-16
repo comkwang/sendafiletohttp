@@ -21,6 +21,7 @@ using System.Web;
 using System.Text;
 using Newtonsoft.Json.Linq;
 using System.Net.Http.Headers;
+using System.Net;
 
 namespace sendafiletohttp
 {
@@ -53,6 +54,16 @@ namespace sendafiletohttp
             public string X_Amz_Signature { get; set; }
         }
 
+        public class completupload
+        {
+            public string bucketKey { get; set; }
+            public string objectId { get; set; }
+            public string objectKey { get; set; }
+            public string size { get; set; }
+            public string contentType { get; set; }
+            public string location { get; set; }
+        }
+
       
         //blobtobim
         //bimtoblob
@@ -64,174 +75,171 @@ namespace sendafiletohttp
         {
             var formdata = await req.ReadFormAsync();
 
-            string posturl=string.Empty;
-            string filename = string.Empty;
+            string[] posturl;            
+            string blobname = string.Empty;
             string uploadkey = string.Empty;
             string bucketkey = string.Empty;
-            string objectkey = string.Empty;
-            string token = string.Empty;
+            string objectkey = string.Empty;          
             string projectid = string.Empty;   
             string upload_file_name = string.Empty;
             string upload_folder_id = string.Empty;
             string upload_object_id = string.Empty;
-
+            string stgconnectionstring = string.Empty; 
+            string containername = string.Empty;
+            string callbackurl = string.Empty;
             try
             {
-                posturl = formdata["url"];
-                filename = formdata["filename"];
+                string url = formdata["url"];
+                posturl = url.Split(',');
+                callbackurl = formdata["callbackurl"];
+                blobname = formdata["blobname"];
                 uploadkey = formdata["uploadkey"];
                 bucketkey = formdata["bucketkey"];
                 objectkey = formdata["objectkey"];
-                token = formdata["token"];
+          
                 projectid = formdata["projectid"];
+                stgconnectionstring = formdata["stgconnectionstring"];
+                containername = formdata["containername"];
                 upload_file_name = formdata["upload_file_name"];
                 upload_folder_id = formdata["upload_folder_id"];
                 upload_object_id = formdata["upload_object_id"];
 
-                log.LogError("posturl {}\n", posturl);
-                log.LogError("filename {}\n",filename);
+                log.LogError("posturl leng {}\n", posturl.Length);
+                for (int i = 0; i < posturl.Length; i++)
+                    log.LogError("posturl{0} {1}\n", i, posturl[i]);
+
+                log.LogError("blobname {}\n",blobname);
                 log.LogError("uploadkey {}]n",uploadkey);
                 log.LogError("bucketkey {}\n",bucketkey);
-                log.LogError("objectkey {}\n",objectkey);
-                log.LogError("token {}\n",token);
+                log.LogError("objectkey {}\n",objectkey);          
                 log.LogError("projectid {}\n",projectid);
                 log.LogError("upload_file_name {}\n", upload_file_name);
                 log.LogError("upload_folder_id {}\n", upload_folder_id);
                 log.LogError("upload_object_id {}\n", upload_object_id);
+                log.LogError("stgconnectionstring {}\n", stgconnectionstring);
+                log.LogError("containername {}\n", containername);
 
             } 
             catch (Exception ex)
             {
                 log.LogError(ex.Message);
-                return new BadRequestObjectResult("Bad form-data");
+                return new BadRequestObjectResult("missing parameter");
             }
 
             log.LogInformation("Downloading from Blob...\n");
 
-            string storageAccount_connectionString = "DefaultEndpointsProtocol=https;AccountName=storagecde;AccountKey=qk9t+wsINASsXfC+W9+e9crkwhYZ1x+I2PFtawdGMLbw8y32YBRL7Lul4QjolCoANLMEMwJC01rR+AStkrFBQw==;EndpointSuffix=core.windows.net";
-            string azure_ContainerName = "cde";           
-            CloudStorageAccount mycloudStorageAccount = CloudStorageAccount.Parse(storageAccount_connectionString);
+            CloudStorageAccount mycloudStorageAccount = CloudStorageAccount.Parse(stgconnectionstring);
             CloudBlobClient blobClient = mycloudStorageAccount.CreateCloudBlobClient();
-            CloudBlobContainer container = blobClient.GetContainerReference(azure_ContainerName);
-            CloudBlockBlob cloudBlockBlob = container.GetBlockBlobReference(filename);
-           
-            MemoryStream mem = new MemoryStream();
-            await cloudBlockBlob.DownloadToStreamAsync(mem);
-            log.LogInformation("download completed");
-           
-            var httpClient = new HttpClient();
-            httpClient.Timeout = TimeSpan.FromMinutes(60);
+            CloudBlobContainer container = blobClient.GetContainerReference(containername);
+            CloudBlockBlob cloudBlockBlob = container.GetBlockBlobReference(blobname);
 
-            StreamContent strm = new StreamContent(mem);
-            strm.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+
+
+            //MemoryStream mem = new MemoryStream();
+            //await cloudBlockBlob.DownloadToStreamAsync(mem);
+            //byte[] content = mem.ToArray();
+
+
+            //log.LogInformation("download completed length {}\n",mem.Length);
+
+
+
+            
             try
             {
                 log.LogInformation("Uploading to BIM.... \n");
-                // upload file
-                var response = await httpClient.PutAsync(posturl, strm);
-                var contents = await response.Content.ReadAsStringAsync();
-                log.LogError(response.ToString());
-                log.LogError(contents.ToString());
+                int offset = 0;
+                int idx = 0;
+                int bytesize = 50000000;
+                byte[] buffer = new byte[bytesize];
+                do
+                {
+                    var httpClient = new HttpClient();
+                    // httpClient.Timeout = TimeSpan.FromMinutes(60);
 
+                    MemoryStream memStream = new MemoryStream();
+
+                    //await cloudBlockBlob.DownloadToStreamAsync(memStream);
+                    await cloudBlockBlob.DownloadRangeToStreamAsync(memStream, offset, bytesize);
+                    //await cloudBlockBlob.DownloadRangeToByteArrayAsync(buffer,0,offset, 3000);
+                    //await cloudBlockBlob.DownloadToByteArrayAsync(buffer, 0);
+
+                    log.LogInformation("memStream {}\n", memStream.Length);               
+                    
+                    StreamContent strmcontent = new StreamContent(memStream);
+
+
+              //      strmcontent.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+
+                    var content = new MultipartFormDataContent();
+                 //   content.Headers.ContentType.MediaType = "multipart/form-data";
+                    var byte_content = new ByteArrayContent(strmcontent.ReadAsByteArrayAsync().Result);                   
+                 //   byte_content.Headers.ContentType = MediaTypeHeaderValue.Parse("application/octet-stream");
+                    content.Add(byte_content);
+                  //  httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("multipart/form-data"));
+
+                    var response = await httpClient.PutAsync(posturl[idx], content);
+
+                    var contents = await response.Content.ReadAsStringAsync();
+
+
+                    log.LogError("response {}\n", response.ToString());
+                    log.LogError("contents {}\n", contents.ToString());                  
+
+                    offset = offset + bytesize;
+                    idx++;
+
+                } while (posturl.Length > idx);
+
+                log.LogInformation("exit do while\n");
                 var httpClient2 = new HttpClient();
 
+                string payload = string.Format(@"{{ ""blobname"":""{0}"" }}", blobname);
+                var httpContent = new StringContent(payload, Encoding.UTF8, "application/json");
+                var response2 = await httpClient2.PostAsync(callbackurl, httpContent);
+
+                //var httpClient2 = new HttpClient();
+                /*
                 log.LogInformation("upload completed\n");
+                JObject payload3 = new JObject(new JProperty("uploadKey", uploadkey));
+                var httpContent3 = new StringContent(payload3.ToString(), Encoding.UTF8, "application/json");
+                httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                string url3 = string.Format(@"https://developer.api.autodesk.com/oss/v2/buckets/{0}/objects/{1}/signeds3upload", bucketkey, objectkey);
+                
+                var response3 = await httpClient.PostAsync(url3, httpContent3);
+                var contents3 = await response3.Content.ReadAsStringAsync();
+                log.LogError("httpclient-response--- {}\n",response3.ToString());
+                log.LogError("response {}\n",contents3.ToString());
+                completupload cu = JsonConvert.DeserializeObject<completupload>(contents3);
 
-                JObject payload2 = new JObject(new JProperty("uploadKey", uploadkey));
-
-                var httpContent2 = new StringContent(payload2.ToString(), Encoding.UTF8, "application/json");
-
-                httpClient2.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-                string url2 = string.Format(@"https://developer.api.autodesk.com/oss/v2/buckets/{0}/objects/{1}/signeds3upload", bucketkey, objectkey);
-                log.LogError("url2 {}\n", url2);
-                var response2 = await httpClient2.PostAsync(url2, httpContent2);
-                var contents2 = await response2.Content.ReadAsStringAsync();
-                log.LogError(response2.ToString());
-                log.LogError(contents2.ToString());
 
 
                 log.LogInformation("create the first version of the file\n");
+                // create the first version of the file           
 
-                // create the first version of the file
+                string payload4 = string.Format(@"{{""jsonapi"":{{""version"":""1.0""}},""data"":{{""type"":""items"",""attributes"":{{""displayName"":""{0}"",""extension"":{{""type"":""items:autodesk.bim360:File"",""version"":""1.0""}}}},""relationships"":{{""tip"":{{""data"":{{""type"":""versions"",""id"":""1""}}}},""parent"":{{""data"":{{""type"":""folders"",""id"":""{1}""}}}}}}}},""included"":[{{""type"":""versions"",""id"":""1"",""attributes"":{{""name"":""{2}"",""extension"":{{""type"":""versions:autodesk.bim360:File"",""version"":""1.0""}}}},""relationships"":{{""storage"":{{""data"":{{""type"":""objects"",""id"":""{3}""}}}}}}}}]}}", upload_file_name, upload_folder_id,upload_file_name, cu.objectId);
+                var httpContent4 = new StringContent(payload4, Encoding.UTF8, "application/json");  
+                string url4 = string.Format(@"https://developer.api.autodesk.com/data/v1/projects/{0}/items",projectid);
+                httpClient.DefaultRequestHeaders.Authorization =  new AuthenticationHeaderValue("Bearer", token);
+               
+                var response4 = await httpClient.PostAsync(url4, httpContent4);
+                var contents4 = await response4.Content.ReadAsStringAsync();
+                log.LogError("response {}\n",response4.ToString());
+                log.LogError("content {}\n",contents4.ToString());
 
-                
-                JObject payload3 = new JObject(
-                    new JProperty("jsonapi", new JObject(new JProperty("version", "1.0")),
-                    new JProperty("data", new JObject(new JProperty("type", "items"),
-                                          new JProperty("attributes", new JObject(new JProperty("displayName", upload_file_name),
-                                                                      new JProperty("extensioin", new JObject(new JProperty("type", "items:autodesk.bim360:File"),
-                                                                                                  new JProperty("version", "1.0"))))))),
-                                          new JProperty("relationships", new JObject(new JProperty("tip", new JObject(new JProperty("data", new JObject(new JProperty("type", "versions"),
-                                                                                                                    new JProperty("id", "1")))),
-                                                                         new JObject(new JProperty("parent", new JObject(new JProperty("data", new JObject(new JProperty("type", "folders"),
-                                                                                                   new JProperty("id", upload_folder_id))))))))),
-                    new JProperty("included", new JArray(new JObject(new JProperty("type", "versions"),
-                                              new JProperty("id", 1),
-                                              new JProperty("attributes", new JObject(new JProperty("name", upload_file_name),
-                                                                          new JProperty("extension", new JObject(new JProperty("type", "versions:autodesk.bim360:File"),
-                                                                                                     new JProperty("version", "1.0"))),
-                                              new JProperty("relationships", new JObject(new JProperty("storage", new JObject(new JProperty("data", new JObject(new JProperty("type", "objects"),
-                                                                                                                            new JProperty("id", upload_object_id))))))))))))));
-
-
-                //JObject payload3 = new JObject
-                //{
-                //    {"jsonapi", {"version", "1.0" }},
-                //    {"data", { "type" , "items"},
-                //             {"attributes", new JProperty("displayName", upload_file_name),
-                //                                                      new JProperty("extensioin", new JProperty("type", "items:autodesk.bim360:File"),
-                //                                                                                  new JProperty("version", "1.0"))),
-                //                          new JProperty("relationships", new JProperty("tip", new JProperty("data", new JProperty("type", "versions"),
-                //                                                                                                    new JProperty("id", "1"))),
-                //                                                         new JProperty("parent", new JProperty("data", new JProperty("type", "folders"),
-                //                                                                                   new JProperty("id", upload_folder_id))))),
-                //    new JArray("included", new JProperty("type", "versions"),
-                //                              new JProperty("id", 1),
-                //                              new JProperty("attributes", new JProperty("name", upload_file_name),
-                //                                                          new JProperty("extension", new JProperty("type", "versions:autodesk.bim360:File"),
-                //                                                                                     new JProperty("version", "1.0"))),
-                //                              new JProperty("relationships", new JProperty("storage", new JProperty("data", new JProperty("type", "objects"),
-                //                                                                                                            new JProperty("id", upload_object_id)))))
-                //};
-
-                //JObject payload3 = new JObject
-                //{
-                //    {"jsonapi", {"version", "1.0" }},
-                //    {"data", {"type", "items"},{ "attributes" ,{ "displayName", }
-
-                //        {
-                //            "attributes",{ "displayName", upload_file_name },
-                //                              {
-                //                "extension", { "type","items:autodesk.bim360:File"},
-                //                                             { "version","1.0"}
-                //            }
-                //        }
-                //    }
-                //};
-
-
-                var httpContent3 = new StringContent(payload3.ToString(), Encoding.UTF8, "application/json");
-                log.LogError(httpContent3.ToString());
-                string url3 = string.Format(@"https://developer.api.autodesk.com/data/v1/projects/{0}/items",projectid);
-                var response3 = await httpClient.PostAsync(url3, httpContent3);
-                var contents3 = await response3.Content.ReadAsStringAsync();
-                log.LogError(response3.ToString());
-                log.LogError(contents3.ToString());
-
-
-                if (response.ReasonPhrase == "OK")
-                    return new OkObjectResult(response.ReasonPhrase);
-                else
-                    return new BadRequestObjectResult(response.ReasonPhrase);
+                */
+                //if (response.ReasonPhrase == "OK")
+                //    return new OkObjectResult(response.ReasonPhrase);
+                //else
+                //    return new BadRequestObjectResult(response.ReasonPhrase);
             }
             catch (Exception e)
             {
                 log.LogError(e.Message);
                 return new BadRequestObjectResult("Upload Failed");
             }
-           
-            
+            return new OkObjectResult("Ok");
+
         }
     }
 }
